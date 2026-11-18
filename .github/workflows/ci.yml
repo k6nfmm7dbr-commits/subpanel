@@ -97,6 +97,8 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/dist
           cp out/* /tmp/dist/
+          # out/ 是构建目录，不能跟着进 dist 分支
+          rm -rf out
           git checkout --orphan dist-new
           git rm -rf . >/dev/null 2>&1 || true
           cp /tmp/dist/* .
@@ -104,5 +106,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # 产物文件名命中 .gitignore 的 /subpanel-*，必须强制加入
           git add -f -A .
+          git status --short
           git commit -m "dist: rebuild from ${GITHUB_SHA:0:7}"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" dist-new:dist
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" dist-new:dist
