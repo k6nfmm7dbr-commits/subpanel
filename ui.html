@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>订阅面板 · subpanel</title>
+<style>
+:root{--bg:#f3f5f9;--card:#fff;--ink:#1a2233;--sub:#6b7484;--line:#e4e8f0;--brand:#2f6df6;--ok:#18a058;--danger:#e04545;--radius:14px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
+.wrap{max-width:920px;margin:0 auto;padding:22px 16px 60px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+h1{font-size:22px;margin:0;font-weight:700}
+h1 small{font-weight:400;color:var(--sub);font-size:13px;margin-left:8px}
+.btn{border:0;background:var(--brand);color:#fff;border-radius:9px;padding:9px 16px;font-size:14px;cursor:pointer;font-weight:600}
+.btn.ghost{background:#eef2fb;color:var(--brand)}
+.btn.sm{padding:5px 11px;font-size:13px}
+.btn.danger{background:#fdecec;color:var(--danger)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:130px}
+.field label{font-size:12px;color:var(--sub);font-weight:600}
+input,select,textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;background:#fff;color:var(--ink);font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid #2f6df633;border-color:var(--brand)}
+textarea{resize:vertical;min-height:60px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--sub);font-size:12px;font-weight:600}
+code{background:#f0f3fa;border-radius:5px;padding:2px 5px;font-size:12px;word-break:break-all}
+.hint{color:var(--sub);font-size:12px;margin:6px 0}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1a2233;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99}
+.toast.show{opacity:1}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tab{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 13px;font-size:13px;cursor:pointer;color:var(--sub)}
+.tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.urlbox{display:flex;gap:7px;align-items:center;margin:7px 0;flex-wrap:wrap}
+.urlbox code{flex:1;min-width:240px;background:#f6f8fd;padding:7px 9px;border-radius:7px}
+.set-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.pill{font-size:12px;background:#eaf6ef;color:var(--ok);border-radius:20px;padding:3px 10px}
+.muted{color:var(--sub)}
+pre{background:#111827;color:#e5e7eb;border-radius:10px;padding:14px;overflow:auto;font-size:12px;max-height:320px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>订阅面板 <small>subpanel · 一份节点，全客户端订阅</small></h1>
+  <button class="btn ghost sm" onclick="refresh()">刷新</button>
+</header>
+
+<div class="card">
+  <div class="field" style="margin-bottom:10px;max-width:320px">
+    <label>管理令牌（Admin Token）</label>
+    <input id="admin" type="password" placeholder="启动程序时设置的 token" autocomplete="off">
+  </div>
+  <p class="hint">服务启动时用 <code>-admin 你的令牌</code> 指定。所有管理操作都带这个令牌，订阅链接本身不需要。</p>
+</div>
+
+<div class="card">
+  <h2 style="font-size:16px;margin:0 0 12px">节点配置</h2>
+  <div class="row">
+    <div class="field"><label>配置组名称</label><input id="setName" placeholder="例如：我的节点"></div>
+    <div class="field"><label>订阅令牌（留空自动生成）</label><input id="setToken" placeholder="留空自动生成"></div>
+  </div>
+  <div id="nodes"></div>
+  <button class="btn ghost sm" style="margin-top:10px" onclick="addNode()">+ 添加节点</button>
+  <div style="margin-top:12px">
+    <button class="btn" onclick="saveSet()">保存并生成订阅链接</button>
+  </div>
+</div>
+
+<div class="card hidden" id="urlsCard">
+  <h2 style="font-size:16px;margin:0 0 6px">订阅链接 <span class="pill" id="urlToken"></span></h2>
+  <p class="hint">把对应链接复制到代理软件即可导入。更新节点后无需改动链接。</p>
+  <div id="urls"></div>
+  <details style="margin-top:10px"><summary class="hint">预览任意格式输出</summary>
+    <div class="tabs" id="fmtTabs"></div>
+    <pre id="preview">选择格式…</pre>
+  </details>
+</div>
+
+<div class="card">
+  <h2 style="font-size:16px;margin:0 0 10px">已保存的配置组</h2>
+  <div id="sets"><p class="muted">加载中…</p></div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TYPES=['ss','ssr','trojan','vmess','vless','hysteria','hysteria2','tuic','wireguard'];
+const NETWORKS=['tcp','ws','grpc','h2','http','quic','kcp'];
+let nodeRows=[];
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
+function admin(){return document.getElementById('admin').value.trim()}
+function api(path,opt={}){opt.headers=opt.headers||{};opt.headers['X-Admin-Token']=admin();if(opt.body&&typeof opt.body!=='string'){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(opt.body)}return fetch(path,opt).then(async r=>{const t=await r.text();let j;try{j=JSON.parse(t)}catch{j={raw:t}}if(!r.ok)throw new Error(j.error||t||r.status);return j})}
+
+function nodeHTML(n,i){return `<div class="card" style="background:#fafbfe;margin:10px 0;padding:14px">
+  <div class="row">
+    <div class="field"><label>名称</label><input data-i="${i}" data-k="name" value="${esc(n.name)}" placeholder="节点 ${i+1}"></div>
+    <div class="field" style="max-width:120px"><label>协议</label><select data-i="${i}" data-k="type">${TYPES.map(t=>`<option ${n.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="field"><label>服务器</label><input data-i="${i}" data-k="server" value="${esc(n.server)}" placeholder="1.2.3.4"></div>
+    <div class="field" style="max-width:100px"><label>端口</label><input type="number" data-i="${i}" data-k="port" value="${esc(n.port||8388)}"></div>
+    <button class="btn danger sm" onclick="delNode(${i})">删除</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <div class="field"><label>密码</label><input data-i="${i}" data-k="password" value="${esc(n.password)}"></div>
+    <div class="field"><label>UUID（vmess/vless/tuic）</label><input data-i="${i}" data-k="uuid" value="${esc(n.uuid)}"></div>
+    <div class="field" style="max-width:150px"><label>加密/方法</label><input data-i="${i}" data-k="cipher" value="${esc(n.cipher)}" placeholder="aes-256-gcm"></div>
+    <div class="field" style="max-width:130px"><label>传输</label><select data-i="${i}" data-k="network"><option value="">默认</option>${NETWORKS.map(t=>`<option ${n.network===t?'selected':''}>${t}</option>`).join('')}</select></div>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <div class="field"><label>Host</label><input data-i="${i}" data-k="host" value="${esc(n.host)}"></div>
+    <div class="field"><label>Path</label><input data-i="${i}" data-k="path" value="${esc(n.path)}"></div>
+    <div class="field"><label>SNI</label><input data-i="${i}" data-k="sni" value="${esc(n.sni)}"></div>
+    <div class="field"><label>ALPN（逗号分隔）</label><input data-i="${i}" data-k="alpn" value="${esc(n.alpn)}" placeholder="h2,http/1.1"></div>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label style="font-size:13px"><input type="checkbox" style="width:auto" data-i="${i}" data-k="tls" ${n.tls?'checked':''}> TLS</label>
+    <label style="font-size:13px"><input type="checkbox" style="width:auto" data-i="${i}" data-k="skipCert" ${n.skipCert?'checked':''}> 跳过证书验证</label>
+    <label style="font-size:13px"><input type="checkbox" style="width:auto" data-i="${i}" data-k="udp" ${n.udp?'checked':''}> UDP</label>
+  </div>
+  <details style="margin-top:8px"><summary class="hint">协议专用字段（SSR / Hysteria / TUIC / WireGuard / VMess）</summary>
+  <div class="row" style="margin-top:8px">
+    <div class="field"><label>SSR 协议</label><input data-i="${i}" data-k="ssrProtocol" value="${esc(n.ssrProtocol)}" placeholder="auth_sha1_v4"></div>
+    <div class="field"><label>SSR 混淆</label><input data-i="${i}" data-k="ssrObfuscation" value="${esc(n.ssrObfuscation)}" placeholder="tls1.2_ticket_auth"></div>
+    <div class="field"><label>SSR 参数</label><input data-i="${i}" data-k="ssrParam" value="${esc(n.ssrParam)}"></div>
+    <div class="field" style="max-width:100px"><label>AlterID</label><input type="number" data-i="${i}" data-k="alterId" value="${esc(n.alterId||0)}"></div>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <div class="field" style="max-width:110px"><label>上行 Mbps</label><input type="number" data-i="${i}" data-k="upMbps" value="${esc(n.upMbps||0)}"></div>
+    <div class="field" style="max-width:110px"><label>下行 Mbps</label><input type="number" data-i="${i}" data-k="downMbps" value="${esc(n.downMbps||0)}"></div>
+    <div class="field" style="max-width:130px"><label>Obfs</label><input data-i="${i}" data-k="obfs" value="${esc(n.obfs)}" placeholder="salamander"></div>
+    <div class="field" style="max-width:90px"><label>TUIC 版本</label><input data-i="${i}" data-k="version" value="${esc(n.version||'5')}"></div>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <div class="field"><label>WG 私钥</label><input data-i="${i}" data-k="privateKey" value="${esc(n.privateKey)}"></div>
+    <div class="field"><label>WG 对端公钥</label><input data-i="${i}" data-k="peerKey" value="${esc(n.peerKey)}"></div>
+    <div class="field"><label>WG 内网 IP</label><input data-i="${i}" data-k="ip" value="${esc(n.ip)}" placeholder="10.0.0.2/32"></div>
+    <div class="field"><label>WG DNS</label><input data-i="${i}" data-k="dns" value="${esc(n.dns)}" placeholder="1.1.1.1"></div>
+    <div class="field" style="max-width:90px"><label>MTU</label><input type="number" data-i="${i}" data-k="mtu" value="${esc(n.mtu||1420)}"></div>
+  </div>
+  </details>
+</div>`}
+function renderNodes(){document.getElementById('nodes').innerHTML=nodeRows.map(nodeHTML).join('')}
+function addNode(){nodeRows.push({type:'ss',port:8388,cipher:'aes-256-gcm'});renderNodes();document.querySelector('#nodes input[data-k="name"]')?.focus()}
+function delNode(i){nodeRows.splice(i,1);renderNodes()}
+function collectNodes(){document.querySelectorAll('#nodes [data-i]').forEach(el=>{const i=+el.dataset.i,k=el.dataset.k;if(!nodeRows[i])return;nodeRows[i][k]=el.type==='checkbox'?el.checked:(el.type==='number'?(+el.value||0):el.value)});return nodeRows}
+function loadSet(set){document.getElementById('setName').value=set.name||'';document.getElementById('setToken').value=set.token||'';nodeRows=JSON.parse(JSON.stringify(set.nodes||[]));renderNodes();showURLs(set.token)}
+
+function saveSet(){if(!admin()){toast('请先填写管理令牌');return}const nodes=collectNodes();if(!nodes.length){toast('至少添加一个节点');return}const payload={name:document.getElementById('setName').value.trim()||'我的节点',token:document.getElementById('setToken').value.trim(),nodes};api('/api/sets',{method:'POST',body:payload}).then(j=>{document.getElementById('setToken').value=j.set.token;toast('已保存');refresh();showURLs(j.set.token)}).catch(e=>toast('保存失败：'+e.message))}
+function refresh(){if(!admin()){document.getElementById('sets').innerHTML='<p class="muted">填写管理令牌后加载</p>';return}api('/api/sets').then(j=>{const list=j.sets||[];document.getElementById('sets').innerHTML=list.length?list.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)"><div><b>${esc(s.name)}</b> <code>${esc(s.token)}</code> <span class="muted">(${s.nodes.length} 节点)</span></div><div><button class="btn ghost sm" onclick="editSet('${esc(s.token)}')">编辑</button> <button class="btn danger sm" onclick="delSet('${esc(s.token)}')">删除</button></div></div>`).join(''):'<p class="muted">还没有配置组</p>';window._sets=list}).catch(e=>{document.getElementById('sets').innerHTML='<p class="muted">加载失败：'+esc(e.message)+'</p>'})}
+function editSet(token){const s=(window._sets||[]).find(x=>x.token===token);if(s)loadSet(s)}
+function delSet(token){if(!confirm('删除配置组 '+token+'？'))return;api('/api/sets/'+token,{method:'DELETE'}).then(()=>{toast('已删除');refresh()}).catch(e=>toast('失败：'+e.message))}
+function showURLs(token){if(!token)return;api('/api/urls?token='+encodeURIComponent(token)).then(j=>{document.getElementById('urlsCard').classList.remove('hidden');document.getElementById('urlToken').textContent=token;document.getElementById('urls').innerHTML=(j.urls||[]).map(u=>`<div class="urlbox"><code>${esc(u.name)}</code><code>${esc(u.url)}</code><button class="btn ghost sm" onclick="cp('${esc(u.url)}')">复制</button></div>`).join('');document.getElementById('fmtTabs').innerHTML=(j.urls||[]).map(u=>`<button class="tab" data-url="${esc(u.url)}" data-id="${esc(u.id)}" onclick="preview(this)">${esc(u.id)}</button>`).join('')}).catch(e=>toast('链接加载失败：'+e.message))}
+function preview(el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));el.classList.add('on');fetch(el.dataset.url).then(r=>r.text()).then(t=>document.getElementById('preview').textContent=t)}
+function cp(s){navigator.clipboard?.writeText(s).then(()=>toast('已复制')).catch(()=>toast('复制失败，请手动选择'))}
+addNode();refresh();
+</script>
+</body>
+</html>
