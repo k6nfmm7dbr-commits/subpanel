@@ -27,7 +27,10 @@ jobs:
       - name: Installer syntax
         run: |
           bash -n install.sh
-          command -v shellcheck >/dev/null && shellcheck -S warning install.sh
+          # runner 未必带 shellcheck，没有就只做语法检查
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -S warning install.sh
+          fi
 
   build-matrix:
     runs-on: ubuntu-latest
