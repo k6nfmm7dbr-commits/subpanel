@@ -1,5 +1,12 @@
 # Changelog
 
+## 未发布
+
+- 新增一键安装脚本 `install.sh`：下载并校验二进制、创建 `subpanel` 系统用户、安装 systemd 或 OpenRC 服务、自动生成管理令牌、装完请求 `/healthz` 自检；支持 `--port`、`--listen`、`--uninstall`、`--uninstall --purge`。
+- 升级即重跑安装命令，配置与令牌保留；二进制原子替换。
+- CI 新增 `publish-dist`：交叉编译 7 个 linux 架构，连同安装脚本发布到 `dist` 分支，附 `SHA256SUMS`。
+- `config.Version` 由常量改为变量，构建时通过 `-ldflags -X` 注入版本号与提交号。
+
 ## v1.1.0
 
 - 按 sbx 框架重构：`cmd/subpanel` + `internal/{config,model,formats,store,server}` 分层。

@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 )
 
-const Version = "1.1.0"
+// Version 是面板版本。发布时由 CI 用 -ldflags -X 注入构建号，
+// 因此这里必须是变量而不是常量。
+var Version = "1.1.0"
 
 // Config is the on-disk panel configuration.
 type Config struct {
