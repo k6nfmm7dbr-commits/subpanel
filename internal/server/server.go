@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"crypto/rand"
@@ -6,14 +6,17 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
+
+	"subpanel/internal/formats"
+	"subpanel/internal/store"
 )
 
+// Server serves the embedded panel, admin API and public subscription endpoints.
 type Server struct {
-	store *Store
-	admin string // admin token for panel API
+	store *store.Store
+	admin string
 }
 
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {
@@ -30,7 +33,6 @@ func randomToken() string {
 }
 
 func (s *Server) checkAdmin(r *http.Request) bool {
-	// Header first, then ?token= for convenience from CLI.
 	t := r.Header.Get("X-Admin-Token")
 	if t == "" {
 		t = r.URL.Query().Get("admin")
@@ -46,10 +48,19 @@ func decodeBody(r *http.Request, v interface{}) error {
 	return json.Unmarshal(body, v)
 }
 
-func (s *Server) routes() http.Handler {
+// New creates a Server with the given data file and admin token.
+func New(dataFile, adminToken string) (*Server, error) {
+	st, err := store.OpenStore(dataFile)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{store: st, admin: adminToken}, nil
+}
+
+// Handler returns the root HTTP handler (mux + security headers).
+func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// Panel static assets are embedded in assets.go.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
 			http.NotFound(w, r)
@@ -60,7 +71,11 @@ func (s *Server) routes() http.Handler {
 		w.Write(indexHTML)
 	})
 
-	// Admin API: list / create / update / delete node sets.
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		io.WriteString(w, "ok\n")
+	})
+
 	mux.HandleFunc("/api/sets", func(w http.ResponseWriter, r *http.Request) {
 		if !s.checkAdmin(r) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "admin token required"})
@@ -68,9 +83,9 @@ func (s *Server) routes() http.Handler {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, 200, map[string]interface{}{"sets": s.store.List(), "formats": formats})
+			writeJSON(w, 200, map[string]interface{}{"sets": s.store.List(), "formats": formats.Formats})
 		case http.MethodPost, http.MethodPut:
-			var set NodeSet
+			var set store.NodeSet
 			if err := decodeBody(r, &set); err != nil {
 				writeJSON(w, 400, map[string]string{"error": err.Error()})
 				return
@@ -115,7 +130,6 @@ func (s *Server) routes() http.Handler {
 		writeJSON(w, 200, map[string]interface{}{"set": set})
 	})
 
-	// Public subscription endpoint: /sub/{token}/{format}
 	mux.HandleFunc("/sub/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(parts) != 3 || parts[0] != "sub" {
@@ -128,7 +142,7 @@ func (s *Server) routes() http.Handler {
 			http.Error(w, "subscription not found", http.StatusNotFound)
 			return
 		}
-		body, contentType, ok := generateSubscription(formatID, set.Nodes, set.Name)
+		body, contentType, ok := formats.GenerateSubscription(formatID, set.Nodes, set.Name)
 		if !ok {
 			http.Error(w, "unknown subscription format", http.StatusBadRequest)
 			return
@@ -141,7 +155,6 @@ func (s *Server) routes() http.Handler {
 		io.WriteString(w, body)
 	})
 
-	// List of all subscription URLs for a token (admin only).
 	mux.HandleFunc("/api/urls", func(w http.ResponseWriter, r *http.Request) {
 		if !s.checkAdmin(r) {
 			writeJSON(w, 401, map[string]string{"error": "admin token required"})
@@ -157,8 +170,8 @@ func (s *Server) routes() http.Handler {
 			scheme = "https"
 		}
 		base := scheme + "://" + r.Host
-		urls := make([]map[string]string, 0, len(formats))
-		for _, f := range formats {
+		urls := make([]map[string]string, 0, len(formats.Formats))
+		for _, f := range formats.Formats {
 			urls = append(urls, map[string]string{
 				"id": f.ID, "name": f.Name, "url": base + "/sub/" + token + "/" + f.Path,
 			})
@@ -166,20 +179,28 @@ func (s *Server) routes() http.Handler {
 		writeJSON(w, 200, map[string]interface{}{"urls": urls})
 	})
 
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		mux.ServeHTTP(w, r)
+	})
 }
 
-func serve(addr, dataFile, adminToken string) error {
-	store, err := OpenStore(dataFile)
+// Serve starts an HTTP server on addr (used by older callers/tests).
+func Serve(addr, dataFile, adminToken string) error {
+	s, err := New(dataFile, adminToken)
 	if err != nil {
 		return err
 	}
-	srv := &Server{store: store, admin: adminToken}
-	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		srv.routes().ServeHTTP(w, r)
-	})
-	return http.ListenAndServe(addr, h)
+	srv := &http.Server{Addr: addr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	return srv.ListenAndServe()
 }
 
-var _ = strconv.Itoa
+// ServeHTTP attaches the panel handler to an existing *http.Server and serves.
+func ServeHTTP(srv *http.Server, dataFile, adminToken string) error {
+	s, err := New(dataFile, adminToken)
+	if err != nil {
+		return err
+	}
+	srv.Handler = s.Handler()
+	return srv.ListenAndServe()
+}

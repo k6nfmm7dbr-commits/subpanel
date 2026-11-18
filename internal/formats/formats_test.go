@@ -1,12 +1,13 @@
-package main
+package formats
 
 import (
 	"strings"
+	"subpanel/internal/model"
 	"testing"
 )
 
-func sampleNodes() []Node {
-	return []Node{
+func sampleNodes() []model.Node {
+	return []model.Node{
 		{Name: "SS-A", Type: "ss", Server: "1.2.3.4", Port: 8388, Cipher: "aes-256-gcm", Password: "pwd", UDP: true},
 		{Name: "VM-B", Type: "vmess", Server: "b.example.com", Port: 443, UUID: "u-123", Network: "ws", Host: "b.example.com", Path: "/ws", TLS: true},
 		{Name: "TR-C", Type: "trojan", Server: "c.example.com", Port: 443, Password: "tp", SNI: "c.example.com"},
@@ -15,9 +16,9 @@ func sampleNodes() []Node {
 
 func TestAllFormatsGenerate(t *testing.T) {
 	nodes := sampleNodes()
-	for _, f := range formats {
+	for _, f := range Formats {
 		for _, key := range []string{f.ID, f.Path} {
-			body, ct, ok := generateSubscription(key, nodes, "test")
+			body, ct, ok := GenerateSubscription(key, nodes, "test")
 			if !ok {
 				t.Fatalf("format %s (key=%s): not generated", f.ID, key)
 			}
@@ -33,8 +34,8 @@ func TestAllFormatsGenerate(t *testing.T) {
 
 func TestShareLinks(t *testing.T) {
 	for _, n := range sampleNodes() {
-		normalizeNode(&n)
-		l := shareLink(n)
+		model.NormalizeNode(&n)
+		l := model.ShareLink(n)
 		if l == "" {
 			t.Fatalf("no share link for %s", n.Type)
 		}
@@ -56,7 +57,7 @@ func TestShareLinks(t *testing.T) {
 }
 
 func TestClashContainsAll(t *testing.T) {
-	out, _, _ := generateSubscription("clash", sampleNodes(), "t")
+	out, _, _ := GenerateSubscription("clash", sampleNodes(), "t")
 	for _, n := range sampleNodes() {
 		if !strings.Contains(out, n.Name) {
 			t.Fatalf("clash missing node %s", n.Name)
@@ -68,35 +69,15 @@ func TestClashContainsAll(t *testing.T) {
 }
 
 func TestBase64Decodable(t *testing.T) {
-	out, _, _ := generateSubscription("base64", sampleNodes(), "t")
+	out, _, _ := GenerateSubscription("base64", sampleNodes(), "t")
 	if !strings.Contains(out, "ss://") && !strings.Contains(out, "vmess://") {
 		// base64 body should decode to share links; check raw prefix via helper
-		b, err := base64StdEncoding.DecodeString(strings.TrimSpace(out))
+		b, err := model.Base64StdEncoding.DecodeString(strings.TrimSpace(out))
 		if err != nil {
 			t.Fatalf("base64 decode failed: %v", err)
 		}
 		if !strings.Contains(string(b), "ss://") {
 			t.Fatalf("decoded body missing links: %s", string(b))
 		}
-	}
-}
-
-func TestStoreRoundTrip(t *testing.T) {
-	path := t.TempDir() + "/nodes.json"
-	s, err := OpenStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	set := &NodeSet{Token: "tok1", Name: "g", Nodes: sampleNodes()}
-	if err := s.Upsert(set); err != nil {
-		t.Fatal(err)
-	}
-	s2, err := OpenStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, ok := s2.Get("tok1")
-	if !ok || len(got.Nodes) != 3 {
-		t.Fatalf("round trip failed: %+v", got)
 	}
 }

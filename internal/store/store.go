@@ -1,18 +1,21 @@
-package main
+package store
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
+	"subpanel/internal/model"
 	"sync"
 )
 
 // NodeSet is a collection of nodes behind one subscription token.
 type NodeSet struct {
-	Token string `json:"token"`
-	Name  string `json:"name"`
-	Nodes []Node `json:"nodes"`
+	Token string       `json:"token"`
+	Name  string       `json:"name"`
+	Nodes []model.Node `json:"nodes"`
 }
 
 // Store persists node sets to a JSON file with atomic writes.
@@ -66,7 +69,7 @@ func (s *Store) List() []*NodeSet {
 	out := make([]*NodeSet, 0, len(s.sets))
 	for _, set := range s.sets {
 		copySet := *set
-		copySet.Nodes = append([]Node(nil), set.Nodes...)
+		copySet.Nodes = append([]model.Node(nil), set.Nodes...)
 		out = append(out, &copySet)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Token < out[j].Token })
@@ -81,7 +84,7 @@ func (s *Store) Get(token string) (*NodeSet, bool) {
 		return nil, false
 	}
 	copySet := *set
-	copySet.Nodes = append([]Node(nil), set.Nodes...)
+	copySet.Nodes = append([]model.Node(nil), set.Nodes...)
 	return &copySet, true
 }
 
@@ -89,10 +92,10 @@ func (s *Store) Upsert(set *NodeSet) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if set.Token == "" {
-		set.Token = randomToken()
+		set.Token = RandomToken()
 	}
 	for i := range set.Nodes {
-		normalizeNode(&set.Nodes[i])
+		model.NormalizeNode(&set.Nodes[i])
 	}
 	s.sets[set.Token] = set
 	return s.saveLocked()
@@ -103,4 +106,11 @@ func (s *Store) Delete(token string) error {
 	defer s.mu.Unlock()
 	delete(s.sets, token)
 	return s.saveLocked()
+}
+
+// RandomToken returns a random hex subscription token.
+func RandomToken() string {
+	b := make([]byte, 12)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }

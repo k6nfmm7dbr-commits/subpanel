@@ -1,4 +1,4 @@
-package main
+package formats
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"subpanel/internal/model"
 )
 
 // Format describes one output subscription format.
@@ -17,7 +18,7 @@ type Format struct {
 	ContentType string `json:"contentType"`
 }
 
-var formats = []Format{
+var Formats = []Format{
 	{"clash", "Clash / Clash Meta", "YAML, works with Clash, Clash.Meta, Mihomo, OpenClash", "clash", "text/yaml; charset=utf-8"},
 	{"clash-meta", "Clash Meta (Mihomo)", "YAML with Meta-only fields (hysteria2, tuic)", "clash-meta", "text/yaml; charset=utf-8"},
 	{"surge", "Surge", "Surge 4/5 proxy.conf / module", "surge", "text/plain; charset=utf-8"},
@@ -31,8 +32,8 @@ var formats = []Format{
 	{"json", "JSON (all nodes)", "Raw unified node JSON for further processing", "nodes.json", "application/json; charset=utf-8"},
 }
 
-func formatByID(id string) (Format, bool) {
-	for _, f := range formats {
+func FormatByID(id string) (Format, bool) {
+	for _, f := range Formats {
 		if f.ID == id {
 			return f, true
 		}
@@ -40,12 +41,12 @@ func formatByID(id string) (Format, bool) {
 	return Format{}, false
 }
 
-func supportedType(n Node, client string) bool {
+func SupportedType(n model.Node, client string) bool {
 	switch client {
 	case "clash", "stash":
 		return n.Type == "ss" || n.Type == "ssr" || n.Type == "trojan" || n.Type == "vmess" || n.Type == "vless" || n.Type == "hysteria" || n.Type == "hysteria2" || n.Type == "tuic" || n.Type == "wireguard"
 	case "clash-meta":
-		return supportedType(n, "clash")
+		return SupportedType(n, "clash")
 	case "surge":
 		return n.Type == "ss" || n.Type == "ssr" || n.Type == "trojan" || n.Type == "vmess" || n.Type == "vless" || n.Type == "hysteria2" || n.Type == "tuic" || n.Type == "wireguard"
 	case "loon":
@@ -65,7 +66,7 @@ func yamlQuote(s string) string {
 	return strconv.Quote(s)
 }
 
-func clashProxy(n Node, meta bool) string {
+func clashProxy(n model.Node, meta bool) string {
 	var b strings.Builder
 	name := n.Name
 	if name == "" {
@@ -131,9 +132,9 @@ func clashProxy(n Node, meta bool) string {
 		if n.SkipCert {
 			b.WriteString("    skip-cert-verify: true\n")
 		}
-		if len(alpnList(n.ALPN)) > 0 && meta {
+		if len(model.ALPNList(n.ALPN)) > 0 && meta {
 			fmt.Fprintf(&b, "    alpn:\n")
-			for _, a := range alpnList(n.ALPN) {
+			for _, a := range model.ALPNList(n.ALPN) {
 				fmt.Fprintf(&b, "      - %s\n", yamlQuote(a))
 			}
 		}
@@ -144,17 +145,17 @@ func clashProxy(n Node, meta bool) string {
 	return b.String()
 }
 
-func genClash(nodes []Node, meta bool) string {
+func genClash(nodes []model.Node, meta bool) string {
 	var b strings.Builder
 	b.WriteString("port: 7890\nsocks-port: 7891\nallow-lan: false\nmode: rule\nlog-level: info\nexternal-controller: 127.0.0.1:9090\n\nproxies:\n")
 	for _, n := range nodes {
-		if supportedType(n, "clash") {
+		if SupportedType(n, "clash") {
 			b.WriteString(clashProxy(n, meta))
 		}
 	}
 	b.WriteString("\nproxy-groups:\n  - name: PROXY\n    type: select\n    proxies:\n      - DIRECT\n")
 	for _, n := range nodes {
-		if supportedType(n, "clash") {
+		if SupportedType(n, "clash") {
 			name := n.Name
 			if name == "" {
 				name = n.Server
@@ -166,11 +167,11 @@ func genClash(nodes []Node, meta bool) string {
 	return b.String()
 }
 
-func genSurge(nodes []Node) string {
+func genSurge(nodes []model.Node) string {
 	var b strings.Builder
 	b.WriteString("[General]\nloglevel = notify\n\n[Proxy]\n")
 	for _, n := range nodes {
-		if !supportedType(n, "surge") {
+		if !SupportedType(n, "surge") {
 			continue
 		}
 		name := n.Name
@@ -211,7 +212,7 @@ func genSurge(nodes []Node) string {
 	b.WriteString("\n[Proxy Group]\nPROXY = select, DIRECT, ")
 	names := []string{}
 	for _, n := range nodes {
-		if supportedType(n, "surge") {
+		if SupportedType(n, "surge") {
 			name := n.Name
 			if name == "" {
 				name = n.Server
@@ -224,11 +225,11 @@ func genSurge(nodes []Node) string {
 	return b.String()
 }
 
-func genLoon(nodes []Node) string {
+func genLoon(nodes []model.Node) string {
 	var b strings.Builder
 	b.WriteString("[General]\n\n[Proxy]\n")
 	for _, n := range nodes {
-		if !supportedType(n, "loon") {
+		if !SupportedType(n, "loon") {
 			continue
 		}
 		name := n.Name
@@ -255,11 +256,11 @@ func genLoon(nodes []Node) string {
 	return b.String()
 }
 
-func genQuantumultX(nodes []Node) string {
+func genQuantumultX(nodes []model.Node) string {
 	var b strings.Builder
 	b.WriteString("[General]\n\n[Policy]\n")
 	for _, n := range nodes {
-		if !supportedType(n, "quantumultx") {
+		if !SupportedType(n, "quantumultx") {
 			continue
 		}
 		name := n.Name
@@ -284,7 +285,7 @@ func genQuantumultX(nodes []Node) string {
 	return b.String()
 }
 
-func singboxOutbound(n Node) map[string]interface{} {
+func singboxOutbound(n model.Node) map[string]interface{} {
 	name := n.Name
 	if name == "" {
 		name = n.Server
@@ -331,8 +332,8 @@ func singboxOutbound(n Node) map[string]interface{} {
 		if n.SkipCert {
 			tls["insecure"] = true
 		}
-		if len(alpnList(n.ALPN)) > 0 {
-			tls["alpn"] = alpnList(n.ALPN)
+		if len(model.ALPNList(n.ALPN)) > 0 {
+			tls["alpn"] = model.ALPNList(n.ALPN)
 		}
 		out["tls"] = tls
 	}
@@ -347,17 +348,17 @@ func singboxOutbound(n Node) map[string]interface{} {
 	return out
 }
 
-func genSingBox(nodes []Node) string {
+func genSingBox(nodes []model.Node) string {
 	outbounds := []map[string]interface{}{{"type": "selector", "tag": "proxy", "outbounds": []string{}}}
 	var names []string
 	for _, n := range nodes {
-		if supportedType(n, "singbox") {
+		if SupportedType(n, "singbox") {
 			names = append(names, n.Name)
 		}
 	}
 	outbounds[0]["outbounds"] = names
 	for _, n := range nodes {
-		if supportedType(n, "singbox") {
+		if SupportedType(n, "singbox") {
 			outbounds = append(outbounds, singboxOutbound(n))
 		}
 	}
@@ -365,10 +366,10 @@ func genSingBox(nodes []Node) string {
 	return string(b)
 }
 
-func genLinks(nodes []Node) string {
+func genLinks(nodes []model.Node) string {
 	var lines []string
 	for _, n := range nodes {
-		if l := shareLink(n); l != "" {
+		if l := model.ShareLink(n); l != "" {
 			lines = append(lines, l)
 		}
 	}
@@ -376,11 +377,11 @@ func genLinks(nodes []Node) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func generateSubscription(formatID string, nodes []Node, clientName string) (string, string, bool) {
+func GenerateSubscription(formatID string, nodes []model.Node, clientName string) (string, string, bool) {
 	// Accept both format ID and subscription path as the lookup key, since
 	// URLs use Path (e.g. qx, singbox.json) while the admin API uses ID.
 	resolved := formatID
-	for _, f := range formats {
+	for _, f := range Formats {
 		if formatID == f.ID || formatID == f.Path {
 			resolved = f.ID
 			break
@@ -388,26 +389,26 @@ func generateSubscription(formatID string, nodes []Node, clientName string) (str
 	}
 	switch resolved {
 	case "clash":
-		return genClash(nodes, false), formats[0].ContentType, true
+		return genClash(nodes, false), Formats[0].ContentType, true
 	case "clash-meta":
-		return genClash(nodes, true), formats[1].ContentType, true
+		return genClash(nodes, true), Formats[1].ContentType, true
 	case "surge":
-		return genSurge(nodes), formats[2].ContentType, true
+		return genSurge(nodes), Formats[2].ContentType, true
 	case "shadowrocket", "base64":
-		return encodeShareSubscription(nodes), "text/plain; charset=utf-8", true
+		return model.EncodeShareSubscription(nodes), "text/plain; charset=utf-8", true
 	case "loon":
-		return genLoon(nodes), formats[4].ContentType, true
+		return genLoon(nodes), Formats[4].ContentType, true
 	case "quantumultx":
-		return genQuantumultX(nodes), formats[5].ContentType, true
+		return genQuantumultX(nodes), Formats[5].ContentType, true
 	case "stash":
-		return genClash(nodes, true), formats[6].ContentType, true
+		return genClash(nodes, true), Formats[6].ContentType, true
 	case "singbox":
-		return genSingBox(nodes), formats[7].ContentType, true
+		return genSingBox(nodes), Formats[7].ContentType, true
 	case "links":
-		return genLinks(nodes), formats[9].ContentType, true
+		return genLinks(nodes), Formats[9].ContentType, true
 	case "json":
 		b, _ := json.MarshalIndent(nodes, "", "  ")
-		return string(b), formats[10].ContentType, true
+		return string(b), Formats[10].ContentType, true
 	}
 	return "", "", false
 }

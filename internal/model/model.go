@@ -1,4 +1,4 @@
-package main
+package model
 
 import (
 	"crypto/rand"
@@ -59,7 +59,7 @@ func newID() string {
 	return hex.EncodeToString(b)
 }
 
-func normalizeNode(n *Node) {
+func NormalizeNode(n *Node) {
 	if n.ID == "" {
 		n.ID = newID()
 	}
@@ -105,7 +105,7 @@ func normalizeNode(n *Node) {
 	}
 }
 
-func alpnList(s string) []string {
+func ALPNList(s string) []string {
 	if s == "" {
 		return nil
 	}
@@ -121,12 +121,12 @@ func alpnList(s string) []string {
 }
 
 func b64url(s string) string {
-	return strings.TrimRight(base64URLEncoding.EncodeToString([]byte(s)), "=")
+	return strings.TrimRight(Base64URLEncoding.EncodeToString([]byte(s)), "=")
 }
 
 // ---------- Share links (ss:// ssr:// vmess:// vless:// trojan:// …) ----------
 
-func shareLink(n Node) string {
+func ShareLink(n Node) string {
 	switch n.Type {
 	case "ss":
 		// SIP002: ss://base64(method:password)@server:port#name
@@ -160,7 +160,7 @@ func shareLink(n Node) string {
 			obj["sni"] = n.SNI
 		}
 		b, _ := json.Marshal(obj)
-		return "vmess://" + base64StdEncoding.EncodeToString(b)
+		return "vmess://" + Base64StdEncoding.EncodeToString(b)
 	case "vless":
 		q := url.Values{}
 		if n.Network != "tcp" {
@@ -173,7 +173,7 @@ func shareLink(n Node) string {
 			if n.SNI != "" {
 				q.Set("sni", n.SNI)
 			}
-			if len(alpnList(n.ALPN)) > 0 {
+			if len(ALPNList(n.ALPN)) > 0 {
 				q.Set("alpn", n.ALPN)
 			}
 		} else {
@@ -262,17 +262,17 @@ func shareLink(n Node) string {
 
 func isWireGuard(n Node) bool { return n.Type == "wireguard" }
 
-// encodeShareSubscription produces the universal Base64 subscription body
+// EncodeShareSubscription produces the universal Base64 subscription body
 // used by v2rayN / Xray / Shadowrocket / NekoRay / singular apps.
-func encodeShareSubscription(nodes []Node) string {
+func EncodeShareSubscription(nodes []Node) string {
 	var lines []string
 	for _, n := range nodes {
 		if isWireGuard(n) {
 			continue
 		}
-		if l := shareLink(n); l != "" {
+		if l := ShareLink(n); l != "" {
 			lines = append(lines, l)
 		}
 	}
-	return base64StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))
+	return Base64StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))
 }
