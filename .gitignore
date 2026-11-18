@@ -1,4 +1,4 @@
 nodes.json
-subpanel
-subpanel-*
+/subpanel
+/subpanel-*
 *.tmp
